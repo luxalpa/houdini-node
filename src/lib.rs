@@ -1,7 +1,9 @@
 use glam::Vec3;
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt::Display;
+use std::iter;
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -31,17 +33,47 @@ impl RawAttributeData {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RawAttribute {
-    pub name: String,
     pub len: usize,
     pub data: RawAttributeData,
 }
 
+impl RawAttributeData {
+    /// Helper function
+    fn err<T>(self, expected: AttributeType) -> Result<T> {
+        Err(Error::InvalidAttributeType {
+            expected,
+            actual: self.kind(),
+        })
+    }
+
+    pub fn float(self) -> Result<Vec<f32>> {
+        match self {
+            RawAttributeData::Float(v) => Ok(v),
+            other => other.err(AttributeType::Float),
+        }
+    }
+
+    pub fn int(self) -> Result<Vec<i32>> {
+        match self {
+            RawAttributeData::Int(v) => Ok(v),
+            other => other.err(AttributeType::Int),
+        }
+    }
+
+    pub fn string(self) -> Result<Vec<String>> {
+        match self {
+            RawAttributeData::String(v) => Ok(v),
+            other => other.err(AttributeType::String),
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RawGeometry {
-    pub points: Vec<RawAttribute>,
-    pub vertices: Vec<RawAttribute>,
-    pub prims: Vec<RawAttribute>,
-    pub detail: Vec<RawAttribute>,
+    pub points: HashMap<String, RawAttribute>,
+    pub vertices: HashMap<String, RawAttribute>,
+    pub prims: HashMap<String, RawAttribute>,
+    pub detail: HashMap<String, RawAttribute>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -109,21 +141,7 @@ where
 {
     fn from_raw(raw: Vec<RawGeometry>) -> Result<Self> {
         let d = raw.into_iter().next().ok_or(Error::NoGeometry)?;
-        let points = if let Some(point_attr) = d.points.first() {
-            let num_points = point_attr.data.len() / point_attr.len;
-
-            let points_map: HashMap<String, RawAttribute> = d
-                .points
-                .into_iter()
-                .map(|attr| (attr.name.clone(), attr))
-                .collect();
-
-            (0..num_points)
-                .map(|i| Pt::from_attr(&points_map, i))
-                .collect::<Result<Vec<_>>>()?
-        } else {
-            vec![]
-        };
+        let points = Pt::from_attr(d.points)?;
 
         Ok(Self {
             points,
@@ -136,64 +154,126 @@ where
 
 /// To be derived from the Geo Entity (Point, Vertex, Prim or Detail)
 pub trait EntityFromAttribute: Sized {
-    fn from_attr(attrs: &HashMap<String, RawAttribute>, index: usize) -> Result<Self>;
+    fn from_attr(attrs: HashMap<String, RawAttribute>) -> Result<Vec<Self>>;
 }
 
 impl EntityFromAttribute for () {
-    fn from_attr(_attrs: &HashMap<String, RawAttribute>, _index: usize) -> Result<Self> {
-        Ok(())
+    fn from_attr(_attrs: HashMap<String, RawAttribute>) -> Result<Vec<Self>> {
+        Ok(vec![])
     }
 }
 
-/// To be implemented by the various data types
+/// Translates from the chunked raw data into the final representation.
+/// To be implemented by the various data types.
 pub trait FromAttributeData: Sized {
-    const LEN: usize;
-    fn from_attr_data(data: &RawAttributeData, index: usize) -> Result<Self>;
+    type DataType: FromAttributeDataSource;
+    fn from_attr_data(data: impl Iterator<Item = Self::DataType>) -> impl Iterator<Item = Self>;
 }
 
 impl FromAttributeData for Vec3 {
-    const LEN: usize = 3;
-    fn from_attr_data(data: &RawAttributeData, index: usize) -> Result<Self> {
-        match data {
-            RawAttributeData::Float(v) => {
-                Ok(Vec3::new(v[index * 3], v[index * 3 + 1], v[index * 3 + 2]))
-            }
-            other => Err(Error::InvalidAttributeType {
-                expected: AttributeType::Float,
-                actual: other.kind(),
-            }),
-        }
+    type DataType = [f32; 3];
+    fn from_attr_data(data: impl Iterator<Item = Self::DataType>) -> impl Iterator<Item = Self> {
+        data.map(Self::from)
+    }
+}
+
+impl FromAttributeData for i32 {
+    type DataType = i32;
+    fn from_attr_data(data: impl Iterator<Item = Self::DataType>) -> impl Iterator<Item = Self> {
+        data
+    }
+}
+
+impl FromAttributeData for f32 {
+    type DataType = f32;
+    fn from_attr_data(data: impl Iterator<Item = Self::DataType>) -> impl Iterator<Item = Self> {
+        data
     }
 }
 
 impl FromAttributeData for String {
-    const LEN: usize = 1;
-    fn from_attr_data(data: &RawAttributeData, index: usize) -> Result<Self> {
-        match data {
-            RawAttributeData::String(v) => Ok(v[index].clone()),
-            other => Err(Error::InvalidAttributeType {
-                expected: AttributeType::String,
-                actual: other.kind(),
-            }),
-        }
+    type DataType = String;
+    fn from_attr_data(data: impl Iterator<Item = Self::DataType>) -> impl Iterator<Item = Self> {
+        data
     }
 }
 
-pub fn load_from_attr<T: FromAttributeData>(attr: &RawAttribute, index: usize) -> Result<T> {
-    if attr.len != T::LEN {
+pub trait FromAttributeDataSource: Sized {
+    const LEN: usize;
+    fn from_attr_data(data: RawAttribute) -> Result<impl Iterator<Item = Self>>;
+}
+
+fn into_array_iter<T, const N: usize>(v: Vec<T>) -> impl Iterator<Item = [T; N]> {
+    let mut v = v.into_iter();
+    iter::from_fn(move || {
+        if let Some(val) = v.next_array() {
+            Some(val)
+        } else {
+            None
+        }
+    })
+}
+
+impl<const N: usize> FromAttributeDataSource for [f32; N] {
+    const LEN: usize = N;
+    fn from_attr_data(data: RawAttribute) -> Result<impl Iterator<Item = Self>> {
+        Ok(into_array_iter(data.data.float()?))
+    }
+}
+
+impl<const N: usize> FromAttributeDataSource for [i32; N] {
+    const LEN: usize = N;
+    fn from_attr_data(data: RawAttribute) -> Result<impl Iterator<Item = Self>> {
+        Ok(into_array_iter(data.data.int()?))
+    }
+}
+
+impl<const N: usize> FromAttributeDataSource for [String; N] {
+    const LEN: usize = N;
+    fn from_attr_data(data: RawAttribute) -> Result<impl Iterator<Item = Self>> {
+        Ok(into_array_iter(data.data.string()?))
+    }
+}
+
+impl FromAttributeDataSource for f32 {
+    const LEN: usize = 1;
+    fn from_attr_data(data: RawAttribute) -> Result<impl Iterator<Item = Self>> {
+        Ok(data.data.float()?.into_iter())
+    }
+}
+
+impl FromAttributeDataSource for i32 {
+    const LEN: usize = 1;
+    fn from_attr_data(data: RawAttribute) -> Result<impl Iterator<Item = Self>> {
+        Ok(data.data.int()?.into_iter())
+    }
+}
+
+impl FromAttributeDataSource for String {
+    const LEN: usize = 1;
+    fn from_attr_data(data: RawAttribute) -> Result<impl Iterator<Item = Self>> {
+        Ok(data.data.string()?.into_iter())
+    }
+}
+
+pub fn load_from_attr<T: FromAttributeData>(attr: RawAttribute) -> Result<impl Iterator<Item = T>> {
+    if attr.len != T::DataType::LEN {
         return Err(Error::InvalidAttributeLength {
-            expected: T::LEN,
+            expected: T::DataType::LEN,
             actual: attr.len,
         });
     }
 
-    T::from_attr_data(&attr.data, index)
+    let data_iter = T::DataType::from_attr_data(attr)?;
+
+    Ok(T::from_attr_data(data_iter))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use glam::Vec3;
+    use itertools::izip;
     use std::collections::HashMap;
 
     #[allow(dead_code)] // TODO: Actually check if the data is correct.
@@ -203,11 +283,13 @@ mod tests {
     }
 
     impl EntityFromAttribute for GeoPoint {
-        fn from_attr(attrs: &HashMap<String, RawAttribute>, index: usize) -> Result<Self> {
-            Ok(Self {
-                position: load_from_attr(attrs.get("P").unwrap(), index)?,
-                name: load_from_attr(attrs.get("name").unwrap(), index)?,
-            })
+        fn from_attr(mut attrs: HashMap<String, RawAttribute>) -> Result<Vec<Self>> {
+            let positions = load_from_attr(attrs.remove("P").unwrap())?;
+            let names = load_from_attr(attrs.remove("name").unwrap())?;
+
+            Ok(izip!(positions, names)
+                .map(|(position, name)| Self { position, name })
+                .collect())
         }
     }
 
@@ -216,9 +298,8 @@ mod tests {
         let d = r#"
         [
             {
-                "points": [
-                    {
-                        "name": "P",
+                "points": {
+                    "P": {
                         "len": 3,
                         "data": {
                             "float": [
@@ -234,8 +315,7 @@ mod tests {
                             ]
                         }
                     },
-                    {
-                        "name": "name",
+                    "name": {
                         "len": 1,
                         "data": {
                             "string": [
@@ -245,10 +325,10 @@ mod tests {
                             ]
                         }
                     }
-                ],
-                "vertices": [],
-                "prims": [],
-                "detail": []
+                },
+                "vertices": {},
+                "prims": {},
+                "detail": {}
             }
         ]
         "#;
