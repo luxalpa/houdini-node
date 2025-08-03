@@ -162,8 +162,8 @@ where
     Dt: EntityFromAttribute,
 {
     fn from_raw(raw: RawGeometry) -> Result<Self> {
-        let details = Dt::from_attr(raw.detail)?;
-        let detail = details.into_iter().next();
+        let mut details = Dt::from_attr(raw.detail)?;
+        let detail = details.next();
 
         let detail = if let Some(detail) = detail {
             detail
@@ -175,9 +175,9 @@ where
         };
 
         Ok(Self {
-            points: Pt::from_attr(raw.points)?,
-            vertices: Vt::from_attr(raw.vertices)?,
-            prims: Pr::from_attr(raw.prims)?,
+            points: Pt::from_attr(raw.points)?.collect(),
+            vertices: Vt::from_attr(raw.vertices)?.collect(),
+            prims: Pr::from_attr(raw.prims)?.collect(),
             detail,
         })
     }
@@ -297,7 +297,7 @@ impl IntoAttributeDataSource for String {
 
 /// To be derived from the Geo Entity (Point, Vertex, Prim or Detail)
 pub trait EntityFromAttribute: Sized {
-    fn from_attr(attrs: HashMap<String, RawAttribute>) -> Result<Vec<Self>>;
+    fn from_attr(attrs: HashMap<String, RawAttribute>) -> Result<impl Iterator<Item = Self>>;
 
     /// Returns Some(()) for the `()` type, None in all other cases.
     fn empty() -> Option<Self> {
@@ -306,8 +306,8 @@ pub trait EntityFromAttribute: Sized {
 }
 
 impl EntityFromAttribute for () {
-    fn from_attr(_attrs: HashMap<String, RawAttribute>) -> Result<Vec<Self>> {
-        Ok(vec![])
+    fn from_attr(_attrs: HashMap<String, RawAttribute>) -> Result<impl Iterator<Item = Self>> {
+        Ok(iter::empty())
     }
 
     fn empty() -> Option<Self> {
@@ -446,13 +446,13 @@ mod tests {
     }
 
     impl EntityFromAttribute for GeoPoint {
-        fn from_attr(mut attrs: HashMap<String, RawAttribute>) -> Result<Vec<Self>> {
+        fn from_attr(
+            mut attrs: HashMap<String, RawAttribute>,
+        ) -> Result<impl Iterator<Item = Self>> {
             let positions = load_from_attr(attrs.remove("P").unwrap())?;
             let names = load_from_attr(attrs.remove("name").unwrap())?;
 
-            Ok(izip!(positions, names)
-                .map(|(position, name)| Self { position, name })
-                .collect())
+            Ok(izip!(positions, names).map(|(position, name)| Self { position, name }))
         }
     }
 
@@ -474,12 +474,12 @@ mod tests {
     }
 
     impl EntityFromAttribute for GeoDetail {
-        fn from_attr(mut attrs: HashMap<String, RawAttribute>) -> Result<Vec<Self>> {
+        fn from_attr(
+            mut attrs: HashMap<String, RawAttribute>,
+        ) -> Result<impl Iterator<Item = Self>> {
             let some_detail = load_from_attr(attrs.remove("some_detail").unwrap())?;
 
-            Ok(some_detail
-                .map(|some_detail| Self { some_detail })
-                .collect())
+            Ok(some_detail.map(|some_detail| Self { some_detail }))
         }
     }
 
