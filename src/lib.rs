@@ -100,6 +100,8 @@ pub enum Error {
     Json(#[from] serde_json::Error),
     #[error("No geometry found")]
     NoGeometry,
+    #[error("No detail attribute found")]
+    NoDetail,
     #[error("Invalid attribute length (expected {expected}, actual {actual})")]
     InvalidAttributeLength { expected: usize, actual: usize },
     #[error("Invalid attribute type (expected {expected}, actual {actual})")]
@@ -145,7 +147,7 @@ pub struct Geometry<Pt, Vt = (), Pr = (), Dt = ()> {
     pub points: Vec<Pt>,
     pub vertices: Vec<Vt>,
     pub prims: Vec<Pr>,
-    pub detail: Vec<Dt>,
+    pub detail: Dt,
 }
 
 pub trait FromRawGeometry: Sized {
@@ -160,11 +162,23 @@ where
     Dt: EntityFromAttribute,
 {
     fn from_raw(raw: RawGeometry) -> Result<Self> {
+        let details = Dt::from_attr(raw.detail)?;
+        let detail = details.into_iter().next();
+
+        let detail = if let Some(detail) = detail {
+            detail
+        } else {
+            let Some(v) = Dt::empty() else {
+                return Err(Error::NoDetail);
+            };
+            v
+        };
+
         Ok(Self {
             points: Pt::from_attr(raw.points)?,
             vertices: Vt::from_attr(raw.vertices)?,
             prims: Pr::from_attr(raw.prims)?,
-            detail: Dt::from_attr(raw.detail)?,
+            detail,
         })
     }
 }
@@ -185,7 +199,7 @@ where
             points: Pt::into_attr(self.points),
             vertices: Vt::into_attr(self.vertices),
             prims: Pr::into_attr(self.prims),
-            detail: Dt::into_attr(self.detail),
+            detail: Dt::into_attr(vec![self.detail]),
         })
     }
 }
@@ -284,11 +298,20 @@ impl IntoAttributeDataSource for String {
 /// To be derived from the Geo Entity (Point, Vertex, Prim or Detail)
 pub trait EntityFromAttribute: Sized {
     fn from_attr(attrs: HashMap<String, RawAttribute>) -> Result<Vec<Self>>;
+
+    /// Returns Some(()) for the `()` type, None in all other cases.
+    fn empty() -> Option<Self> {
+        None
+    }
 }
 
 impl EntityFromAttribute for () {
     fn from_attr(_attrs: HashMap<String, RawAttribute>) -> Result<Vec<Self>> {
         Ok(vec![])
+    }
+
+    fn empty() -> Option<Self> {
+        Some(())
     }
 }
 
@@ -416,7 +439,6 @@ mod tests {
     use itertools::{izip, multiunzip};
     use std::collections::HashMap;
 
-    #[allow(dead_code)] // TODO: Actually check if the data is correct.
     #[derive(PartialEq, Debug, Clone)]
     struct GeoPoint {
         position: Vec3,
@@ -443,6 +465,30 @@ mod tests {
                 ("P", generate_to_attr(positions)),
                 ("name", generate_to_attr(names)),
             ])
+        }
+    }
+
+    #[derive(PartialEq, Debug, Clone)]
+    struct GeoDetail {
+        some_detail: String,
+    }
+
+    impl EntityFromAttribute for GeoDetail {
+        fn from_attr(mut attrs: HashMap<String, RawAttribute>) -> Result<Vec<Self>> {
+            let some_detail = load_from_attr(attrs.remove("some_detail").unwrap())?;
+
+            Ok(some_detail
+                .map(|some_detail| Self { some_detail })
+                .collect())
+        }
+    }
+
+    impl EntityIntoAttribute for GeoDetail {
+        fn into_attr(entities: Vec<Self>) -> HashMap<&'static str, RawAttribute> {
+            let (some_detail,): (Vec<_>,) =
+                multiunzip(entities.into_iter().map(|pt| (pt.some_detail,)));
+
+            HashMap::from([("some_detail", generate_to_attr(some_detail))])
         }
     }
 
@@ -481,7 +527,16 @@ mod tests {
                 },
                 "vertices": {},
                 "prims": {},
-                "detail": {}
+                "detail": {
+                    "some_detail": {
+                        "tuple_size": 1,
+                        "data": {
+                            "string": [
+                                "hello"
+                            ]
+                        }
+                    }
+                }
             }
         ]
         "#;
@@ -504,7 +559,7 @@ mod tests {
             }],
             vertices: vec![],
             prims: vec![],
-            detail: vec![],
+            detail: (),
         };
 
         let s = generate_for_testing(g.clone()).unwrap();
