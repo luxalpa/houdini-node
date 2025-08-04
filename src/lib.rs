@@ -5,6 +5,9 @@ use std::collections::HashMap;
 use std::fmt::Display;
 use std::iter;
 
+/// Re-export itertools as it is used in the derive macros.
+pub use itertools;
+
 /// The geometry that gets (de)serialized between Houdini and this script.
 #[derive(Debug, Deserialize)]
 pub struct RawGeometry {
@@ -438,63 +441,19 @@ mod tests {
 
     use super::*;
     use glam::Vec3;
-    use houdini_node::EntityFromAttribute;
     use houdini_node_macro::{EntityFromAttribute, EntityIntoAttribute};
-    use itertools::{izip, multiunzip};
-    use std::collections::HashMap;
 
-    #[derive(PartialEq, Debug, Clone)]
+    #[derive(PartialEq, Debug, Clone, EntityIntoAttribute, EntityFromAttribute)]
     struct GeoPoint {
+        #[attr(name = "P")]
         position: Vec3,
         name: String,
-    }
-
-    impl EntityFromAttribute for GeoPoint {
-        fn from_attr(
-            mut attrs: HashMap<String, RawAttribute>,
-        ) -> Result<impl Iterator<Item = Self>> {
-            let positions = load_from_attr(attrs.remove("P").unwrap())?;
-            let names = load_from_attr(attrs.remove("name").unwrap())?;
-
-            Ok(izip!(positions, names).map(|(position, name)| Self { position, name }))
-        }
-    }
-
-    impl EntityIntoAttribute for GeoPoint {
-        fn into_attr(entities: Vec<Self>) -> HashMap<&'static str, RawAttribute> {
-            let (positions, names): (Vec<_>, Vec<_>) =
-                multiunzip(entities.into_iter().map(|pt| (pt.position, pt.name)));
-
-            HashMap::from([
-                ("P", generate_to_attr(positions)),
-                ("name", generate_to_attr(names)),
-            ])
-        }
     }
 
     #[derive(PartialEq, Debug, Clone, EntityIntoAttribute, EntityFromAttribute)]
     struct GeoDetail {
         some_detail: String,
     }
-
-    // impl EntityFromAttribute for GeoDetail {
-    //     fn from_attr(
-    //         mut attrs: HashMap<String, RawAttribute>,
-    //     ) -> Result<impl Iterator<Item = Self>> {
-    //         let some_detail = load_from_attr(attrs.remove("some_detail").unwrap())?;
-    //
-    //         Ok(some_detail.map(|some_detail| Self { some_detail }))
-    //     }
-    // }
-
-    // impl EntityIntoAttribute for GeoDetail {
-    //     fn into_attr(entities: Vec<Self>) -> HashMap<&'static str, RawAttribute> {
-    //         let (some_detail,): (Vec<_>,) =
-    //             multiunzip(entities.into_iter().map(|pt| (pt.some_detail,)));
-    //
-    //         HashMap::from([("some_detail", generate_to_attr(some_detail))])
-    //     }
-    // }
 
     #[test]
     fn parsing() {
