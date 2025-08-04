@@ -434,8 +434,12 @@ pub fn generate_to_attr<T: IntoAttributeData>(data: Vec<T>) -> RawAttribute {
 
 #[cfg(test)]
 mod tests {
+    extern crate self as houdini_node;
+
     use super::*;
     use glam::Vec3;
+    use houdini_node::EntityFromAttribute;
+    use houdini_node_macro::{EntityFromAttribute, EntityIntoAttribute};
     use itertools::{izip, multiunzip};
     use std::collections::HashMap;
 
@@ -468,29 +472,29 @@ mod tests {
         }
     }
 
-    #[derive(PartialEq, Debug, Clone)]
+    #[derive(PartialEq, Debug, Clone, EntityIntoAttribute, EntityFromAttribute)]
     struct GeoDetail {
         some_detail: String,
     }
 
-    impl EntityFromAttribute for GeoDetail {
-        fn from_attr(
-            mut attrs: HashMap<String, RawAttribute>,
-        ) -> Result<impl Iterator<Item = Self>> {
-            let some_detail = load_from_attr(attrs.remove("some_detail").unwrap())?;
+    // impl EntityFromAttribute for GeoDetail {
+    //     fn from_attr(
+    //         mut attrs: HashMap<String, RawAttribute>,
+    //     ) -> Result<impl Iterator<Item = Self>> {
+    //         let some_detail = load_from_attr(attrs.remove("some_detail").unwrap())?;
+    //
+    //         Ok(some_detail.map(|some_detail| Self { some_detail }))
+    //     }
+    // }
 
-            Ok(some_detail.map(|some_detail| Self { some_detail }))
-        }
-    }
-
-    impl EntityIntoAttribute for GeoDetail {
-        fn into_attr(entities: Vec<Self>) -> HashMap<&'static str, RawAttribute> {
-            let (some_detail,): (Vec<_>,) =
-                multiunzip(entities.into_iter().map(|pt| (pt.some_detail,)));
-
-            HashMap::from([("some_detail", generate_to_attr(some_detail))])
-        }
-    }
+    // impl EntityIntoAttribute for GeoDetail {
+    //     fn into_attr(entities: Vec<Self>) -> HashMap<&'static str, RawAttribute> {
+    //         let (some_detail,): (Vec<_>,) =
+    //             multiunzip(entities.into_iter().map(|pt| (pt.some_detail,)));
+    //
+    //         HashMap::from([("some_detail", generate_to_attr(some_detail))])
+    //     }
+    // }
 
     #[test]
     fn parsing() {
