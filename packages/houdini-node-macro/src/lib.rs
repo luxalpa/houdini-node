@@ -2,6 +2,26 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::{Data, DeriveInput, Expr, ExprLit, Fields, Lit, Meta, parse_macro_input};
 
+/// Proc macro to generate a main function.
+#[proc_macro_attribute]
+pub fn houdini_node(_args: TokenStream, input: TokenStream) -> TokenStream {
+    let input_fn = parse_macro_input!(input as syn::ItemFn);
+    let fn_name = &input_fn.sig.ident;
+
+    // Generate the main function
+    let expanded = quote! {
+        #input_fn
+
+        fn main() {
+            let in_geo = houdini_node::load_from_stdin().unwrap();
+            let out_geo = #fn_name(in_geo).unwrap();
+            houdini_node::generate_to_stdout(out_geo);
+        }
+    };
+
+    TokenStream::from(expanded)
+}
+
 #[proc_macro_derive(InAttrs, attributes(attr))]
 pub fn derive_in_attrs(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);

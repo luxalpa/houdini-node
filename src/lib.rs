@@ -126,8 +126,8 @@ impl Display for AttributeType {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-pub fn load_from_stdin<G: FromRawGeometry>() {
-    load::<G>(std::io::stdin()).unwrap();
+pub fn load_from_stdin<G: FromRawGeometry>() -> Result<G> {
+    load::<G>(std::io::stdin())
 }
 
 pub fn generate_to_stdout<G: IntoRawGeometry>(geometry: G) {
