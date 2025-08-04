@@ -159,10 +159,10 @@ pub trait FromRawGeometry: Sized {
 
 impl<Pt, Vt, Pr, Dt> FromRawGeometry for Geometry<Pt, Vt, Pr, Dt>
 where
-    Pt: EntityFromAttribute,
-    Vt: EntityFromAttribute,
-    Pr: EntityFromAttribute,
-    Dt: EntityFromAttribute,
+    Pt: InAttrs,
+    Vt: InAttrs,
+    Pr: InAttrs,
+    Dt: InAttrs,
 {
     fn from_raw(raw: RawGeometry) -> Result<Self> {
         let mut details = Dt::from_attr(raw.detail)?;
@@ -192,10 +192,10 @@ pub trait IntoRawGeometry: Sized {
 
 impl<Pt, Vt, Pr, Dt> IntoRawGeometry for Geometry<Pt, Vt, Pr, Dt>
 where
-    Pt: EntityIntoAttribute,
-    Vt: EntityIntoAttribute,
-    Pr: EntityIntoAttribute,
-    Dt: EntityIntoAttribute,
+    Pt: OutAttrs,
+    Vt: OutAttrs,
+    Pr: OutAttrs,
+    Dt: OutAttrs,
 {
     fn into_raw(self) -> Result<RawGeometryOutput> {
         Ok(RawGeometryOutput {
@@ -207,11 +207,11 @@ where
     }
 }
 
-pub trait EntityIntoAttribute: Sized {
+pub trait OutAttrs: Sized {
     fn into_attr(entities: Vec<Self>) -> HashMap<&'static str, RawAttribute>;
 }
 
-impl EntityIntoAttribute for () {
+impl OutAttrs for () {
     fn into_attr(_entities: Vec<Self>) -> HashMap<&'static str, RawAttribute> {
         HashMap::new()
     }
@@ -299,7 +299,7 @@ impl IntoAttributeDataSource for String {
 }
 
 /// To be derived from the Geo Entity (Point, Vertex, Prim or Detail)
-pub trait EntityFromAttribute: Sized {
+pub trait InAttrs: Sized {
     fn from_attr(attrs: HashMap<String, RawAttribute>) -> Result<impl Iterator<Item = Self>>;
 
     /// Returns Some(()) for the `()` type, None in all other cases.
@@ -308,7 +308,7 @@ pub trait EntityFromAttribute: Sized {
     }
 }
 
-impl EntityFromAttribute for () {
+impl InAttrs for () {
     fn from_attr(_attrs: HashMap<String, RawAttribute>) -> Result<impl Iterator<Item = Self>> {
         Ok(iter::empty())
     }
@@ -441,16 +441,16 @@ mod tests {
 
     use super::*;
     use glam::Vec3;
-    use houdini_node_macro::{EntityFromAttribute, EntityIntoAttribute};
+    use houdini_node_macro::{InAttrs, OutAttrs};
 
-    #[derive(PartialEq, Debug, Clone, EntityIntoAttribute, EntityFromAttribute)]
+    #[derive(PartialEq, Debug, Clone, OutAttrs, InAttrs)]
     struct GeoPoint {
         #[attr(name = "P")]
         position: Vec3,
         name: String,
     }
 
-    #[derive(PartialEq, Debug, Clone, EntityIntoAttribute, EntityFromAttribute)]
+    #[derive(PartialEq, Debug, Clone, OutAttrs, InAttrs)]
     struct GeoDetail {
         some_detail: String,
     }

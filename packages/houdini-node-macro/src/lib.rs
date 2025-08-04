@@ -2,19 +2,19 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::{Data, DeriveInput, Expr, ExprLit, Fields, Lit, Meta, parse_macro_input};
 
-#[proc_macro_derive(EntityFromAttribute, attributes(attr))]
-pub fn derive_entity_from_attribute(input: TokenStream) -> TokenStream {
+#[proc_macro_derive(InAttrs, attributes(attr))]
+pub fn derive_in_attrs(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
-    impl_entity_from_attribute(&input)
+    impl_in_attrs(&input)
 }
 
-#[proc_macro_derive(EntityIntoAttribute, attributes(attr))]
-pub fn derive_entity_into_attribute(input: TokenStream) -> TokenStream {
+#[proc_macro_derive(OutAttrs, attributes(attr))]
+pub fn derive_out_attrs(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
-    impl_entity_into_attribute(&input)
+    impl_out_attrs(&input)
 }
 
-fn impl_entity_from_attribute(ast: &DeriveInput) -> TokenStream {
+fn impl_in_attrs(ast: &DeriveInput) -> TokenStream {
     let name = &ast.ident;
     let fields = match &ast.data {
         Data::Struct(data) => match &data.fields {
@@ -41,7 +41,7 @@ fn impl_entity_from_attribute(ast: &DeriveInput) -> TokenStream {
     };
 
     let generated = quote! {
-        impl houdini_node::EntityFromAttribute for #name {
+        impl houdini_node::InAttrs for #name {
             fn from_attr(
                 mut attrs: std::collections::HashMap<String, houdini_node::RawAttribute>,
             ) -> houdini_node::Result<impl Iterator<Item = Self>> {
@@ -53,7 +53,7 @@ fn impl_entity_from_attribute(ast: &DeriveInput) -> TokenStream {
     generated.into()
 }
 
-fn impl_entity_into_attribute(ast: &DeriveInput) -> TokenStream {
+fn impl_out_attrs(ast: &DeriveInput) -> TokenStream {
     let name = &ast.ident;
     let fields = match &ast.data {
         Data::Struct(data) => match &data.fields {
@@ -82,7 +82,7 @@ fn impl_entity_into_attribute(ast: &DeriveInput) -> TokenStream {
         .collect();
 
     let generated = quote! {
-        impl houdini_node::EntityIntoAttribute for #name {
+        impl houdini_node::OutAttrs for #name {
             fn into_attr(entities: Vec<Self>) -> ::std::collections::HashMap<&'static str, houdini_node::RawAttribute> {
                 let #multiunzip_pattern: (#multiunzip_types) =
                     houdini_node::itertools::multiunzip(entities.into_iter().map(#entity_map));
