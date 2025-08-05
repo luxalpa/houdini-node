@@ -130,8 +130,16 @@ pub fn load_from_stdin<G: FromRawGeometry>() -> Result<G> {
     load::<G>(std::io::stdin())
 }
 
+pub fn load_raw_from_stdin() -> Result<Vec<RawGeometry>> {
+    serde_json::from_reader(std::io::stdin()).map_err(Into::into)
+}
+
 pub fn generate_to_stdout<G: IntoRawGeometry>(geometry: G) {
     println!("{}", generate::<G>(geometry).unwrap());
+}
+
+pub fn load_from_raw<G: FromRawGeometry>(raw_geometry: RawGeometry) -> Result<G> {
+    G::from_raw(raw_geometry)
 }
 
 fn load<G: FromRawGeometry>(reader: impl std::io::Read) -> Result<G> {

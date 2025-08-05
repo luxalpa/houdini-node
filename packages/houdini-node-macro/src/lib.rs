@@ -8,13 +8,21 @@ pub fn houdini_node(_args: TokenStream, input: TokenStream) -> TokenStream {
     let input_fn = parse_macro_input!(input as syn::ItemFn);
     let fn_name = &input_fn.sig.ident;
 
+    let input_params = input_fn.sig.inputs.iter().map(|_| {
+        quote! {
+            houdini_node::load_from_raw(iter.next().unwrap()).unwrap()
+        }
+    });
+
     // Generate the main function
     let expanded = quote! {
         #input_fn
 
         fn main() {
-            let in_geo = houdini_node::load_from_stdin().unwrap();
-            let out_geo = #fn_name(in_geo).unwrap();
+            let raw_geos = houdini_node::load_raw_from_stdin().unwrap();
+            let mut iter = raw_geos.into_iter();
+
+            let out_geo = #fn_name(#(#input_params),*).unwrap();
             houdini_node::generate_to_stdout(out_geo);
         }
     };

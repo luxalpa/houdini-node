@@ -9,7 +9,7 @@ struct MyPoint {
 }
 
 #[houdini_node]
-fn my_cool_node(geo: Geometry<MyPoint>) -> Result<Geometry<MyPoint>, ()> {
+fn my_cool_node(geo: Geometry<MyPoint>, _geo2: Geometry<MyPoint>) -> Result<Geometry<MyPoint>, ()> {
     println!("Hello, world!");
     Ok(geo)
 }
