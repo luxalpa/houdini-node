@@ -1,5 +1,5 @@
 use proc_macro::TokenStream;
-use quote::quote;
+use quote::{format_ident, quote};
 use syn::{Data, DeriveInput, Expr, ExprLit, Fields, Lit, Meta, parse_macro_input};
 
 /// Proc macro to generate a main function.
@@ -55,8 +55,8 @@ fn impl_in_attrs(ast: &DeriveInput) -> TokenStream {
     let field_loads: Vec<_> = fields
         .iter()
         .map(|field| {
-            let field_name = field.ident.as_ref().unwrap();
-            let attr_name = get_field_name(field);
+            let field_name = format_ident!("v_{}", field.ident.as_ref().unwrap());
+            let attr_name = get_attr_name(field);
             quote! {
                 let #field_name = houdini_node::load_from_attr(attrs.remove(#attr_name).unwrap())?;
             }
@@ -64,8 +64,14 @@ fn impl_in_attrs(ast: &DeriveInput) -> TokenStream {
         .collect();
 
     let field_names: Vec<_> = fields.iter().map(|f| &f.ident).collect();
+
+    // Prefix field names in order to prevent possible (future) name collisions.
+    let prefixed_field_names: Vec<_> = fields
+        .iter()
+        .map(|f| format_ident!("v_{}", f.ident.as_ref().unwrap()))
+        .collect();
     let field_construction = quote! {
-        houdini_node::itertools::izip!(#(#field_names),*).map(|(#(#field_names),*)| Self { #(#field_names),* })
+        houdini_node::itertools::izip!(#(#prefixed_field_names),*).map(|(#(#field_names),*)| Self { #(#field_names),* })
     };
 
     let generated = quote! {
@@ -92,16 +98,22 @@ fn impl_out_attrs(ast: &DeriveInput) -> TokenStream {
     };
 
     let field_names: Vec<_> = fields.iter().map(|f| &f.ident).collect();
-    let attr_names: Vec<_> = fields.iter().map(get_field_name).collect();
+
+    // Prefix field names in order to prevent possible (future) name collisions.
+    let prefixed_field_names: Vec<_> = fields
+        .iter()
+        .map(|f| format_ident!("v_{}", f.ident.as_ref().unwrap()))
+        .collect();
+    let attr_names: Vec<_> = fields.iter().map(get_attr_name).collect();
 
     let vec_types = fields.iter().map(|_| quote! { Vec<_>});
 
-    let multiunzip_pattern = quote! { (#(#field_names,)*) };
+    let multiunzip_pattern = quote! { (#(#prefixed_field_names,)*) };
     let multiunzip_types = quote! { #(#vec_types,)* };
 
     let entity_map = quote! { |entity| (#(entity.#field_names,)*) };
 
-    let hashmap_entries: Vec<_> = field_names
+    let hashmap_entries: Vec<_> = prefixed_field_names
         .iter()
         .zip(attr_names.iter())
         .map(|(name, name_str)| {
@@ -124,7 +136,7 @@ fn impl_out_attrs(ast: &DeriveInput) -> TokenStream {
     generated.into()
 }
 
-fn get_field_name(field: &syn::Field) -> String {
+fn get_attr_name(field: &syn::Field) -> String {
     // Check for #[attr(name = "custom_name")] attribute
     for attr in &field.attrs {
         if attr.path().is_ident("attr") {
