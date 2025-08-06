@@ -27,6 +27,12 @@ pub struct RawGeometryOutput {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct RawAttribute {
+    pub tuple_size: usize,
+    pub data: RawAttributeData,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RawAttributeData {
     Float(Vec<f32>),
@@ -54,22 +60,7 @@ impl RawAttributeData {
             RawAttributeData::String(_) => AttributeType::String,
         }
     }
-}
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct RawAttribute {
-    pub tuple_size: usize,
-    pub data: RawAttributeData,
-}
-
-#[derive(Debug)]
-pub enum AttributeType {
-    Float,
-    Int,
-    String,
-}
-
-impl RawAttributeData {
     /// Helper function
     fn err<T>(self, expected: AttributeType) -> Result<T> {
         Err(Error::InvalidAttributeType {
@@ -100,23 +91,11 @@ impl RawAttributeData {
     }
 }
 
-#[derive(Debug, thiserror::Error)]
-pub enum Error {
-    #[error("IO error")]
-    Io(#[from] std::io::Error),
-    #[error("JSON error")]
-    Json(#[from] serde_json::Error),
-    #[error("No geometry found")]
-    NoGeometry,
-    #[error("No detail attribute found")]
-    NoDetail,
-    #[error("Invalid attribute length (expected {expected}, actual {actual})")]
-    InvalidAttributeLength { expected: usize, actual: usize },
-    #[error("Invalid attribute type (expected {expected}, actual {actual})")]
-    InvalidAttributeType {
-        expected: AttributeType,
-        actual: AttributeType,
-    },
+#[derive(Debug)]
+pub enum AttributeType {
+    Float,
+    Int,
+    String,
 }
 
 impl Display for AttributeType {
@@ -129,7 +108,36 @@ impl Display for AttributeType {
     }
 }
 
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    #[error("IO error")]
+    Io(#[from] std::io::Error),
+    #[error("JSON error: {0}")]
+    Json(#[from] serde_json::Error),
+    #[error("No geometry found")]
+    NoGeometry,
+    #[error("No detail attribute found")]
+    NoDetail,
+    #[error("Invalid attribute length (expected {expected}, actual {actual})")]
+    InvalidAttributeLength { expected: usize, actual: usize },
+    #[error("Invalid attribute type (expected {expected}, actual {actual})")]
+    InvalidAttributeType {
+        expected: AttributeType,
+        actual: AttributeType,
+    },
+    #[error("Geometry at input {0} missing")]
+    GeometryMissing(usize),
+    #[error("{0}")]
+    UserError(String),
+}
+
 pub type Result<T> = std::result::Result<T, Error>;
+
+impl Error {
+    pub fn print_json(&self) {
+        eprintln!("{}", self.to_string());
+    }
+}
 
 pub fn load_from_stdin<G: FromRawGeometry>() -> Result<G> {
     load::<G>(std::io::stdin())
@@ -139,8 +147,9 @@ pub fn load_raw_from_stdin() -> Result<Vec<RawGeometry>> {
     serde_json::from_reader(std::io::stdin()).map_err(Into::into)
 }
 
-pub fn generate_to_stdout<G: IntoRawGeometry>(geometry: G) {
-    println!("{}", generate::<G>(geometry).unwrap());
+pub fn generate_to_stdout<G: IntoRawGeometry>(geometry: G) -> Result<()> {
+    println!("{}", generate::<G>(geometry)?);
+    Ok(())
 }
 
 pub fn load_from_raw<G: FromRawGeometry>(raw_geometry: RawGeometry) -> Result<G> {

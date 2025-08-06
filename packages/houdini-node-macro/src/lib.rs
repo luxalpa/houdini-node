@@ -4,26 +4,35 @@ use syn::{Data, DeriveInput, Expr, ExprLit, Fields, Lit, Meta, parse_macro_input
 
 /// Proc macro to generate a main function.
 #[proc_macro_attribute]
-pub fn houdini_node(_args: TokenStream, input: TokenStream) -> TokenStream {
+pub fn houdini_node_main(_args: TokenStream, input: TokenStream) -> TokenStream {
     let input_fn = parse_macro_input!(input as syn::ItemFn);
     let fn_name = &input_fn.sig.ident;
 
-    let input_params = input_fn.sig.inputs.iter().map(|_| {
-        quote! {
-            houdini_node::load_from_raw(iter.next().unwrap()).unwrap()
-        }
-    });
+    let input_params: Vec<_> = input_fn
+        .sig
+        .inputs
+        .iter()
+        .enumerate()
+        .map(|(i, _)| {
+            quote! {
+                houdini_node::load_from_raw(
+                    iter.next()
+                        .ok_or_else(|| houdini_node::Error::GeometryMissing(#i))?
+                )?
+            }
+        })
+        .collect();
 
-    // Generate the main function
     let expanded = quote! {
         #input_fn
 
-        fn main() {
-            let raw_geos = houdini_node::load_raw_from_stdin().unwrap();
+        fn main() -> houdini_node::Result<()> {
+            let raw_geos = houdini_node::load_raw_from_stdin()?;
             let mut iter = raw_geos.into_iter();
 
-            let out_geo = #fn_name(#(#input_params),*).unwrap();
-            houdini_node::generate_to_stdout(out_geo);
+            let out_geo = #fn_name(#(#input_params),*)
+                .map_err(|e| houdini_node::Error::UserError(e.to_string()))?;
+            houdini_node::generate_to_stdout(out_geo)
         }
     };
 
@@ -156,6 +165,7 @@ fn get_attr_name(field: &syn::Field) -> String {
             }
         }
     }
+
     // Fall back to field name
     field.ident.as_ref().unwrap().to_string()
 }
