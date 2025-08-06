@@ -1,6 +1,5 @@
 mod attribute_types;
 
-use glam::Vec3;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -42,6 +41,10 @@ impl RawAttributeData {
             RawAttributeData::Int(v) => v.len(),
             RawAttributeData::String(v) => v.len(),
         }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 
     pub fn kind(&self) -> AttributeType {
@@ -315,13 +318,7 @@ pub trait FromAttributeDataSource: Sized {
 
 fn into_array_iter<T, const N: usize>(v: Vec<T>) -> impl Iterator<Item = [T; N]> {
     let mut v = v.into_iter();
-    iter::from_fn(move || {
-        if let Some(val) = v.next_array() {
-            Some(val)
-        } else {
-            None
-        }
-    })
+    iter::from_fn(move || v.next_array())
 }
 
 impl<const N: usize> FromAttributeDataSource for [f32; N] {
