@@ -1,3 +1,5 @@
+mod attribute_types;
+
 use glam::Vec3;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
@@ -230,35 +232,6 @@ pub trait IntoAttributeData: Sized {
     fn into_attr_data(data: impl Iterator<Item = Self>) -> impl Iterator<Item = Self::DataType>;
 }
 
-impl IntoAttributeData for Vec3 {
-    type DataType = [f32; 3];
-
-    fn into_attr_data(data: impl Iterator<Item = Self>) -> impl Iterator<Item = Self::DataType> {
-        data.map(|v| v.into())
-    }
-}
-
-impl IntoAttributeData for i32 {
-    type DataType = i32;
-    fn into_attr_data(data: impl Iterator<Item = Self>) -> impl Iterator<Item = Self::DataType> {
-        data
-    }
-}
-
-impl IntoAttributeData for f32 {
-    type DataType = f32;
-    fn into_attr_data(data: impl Iterator<Item = Self>) -> impl Iterator<Item = Self::DataType> {
-        data
-    }
-}
-
-impl IntoAttributeData for String {
-    type DataType = String;
-    fn into_attr_data(data: impl Iterator<Item = Self>) -> impl Iterator<Item = Self::DataType> {
-        data
-    }
-}
-
 pub trait IntoAttributeDataSource: Sized {
     const LEN: usize;
     fn into_attr_data(data: impl Iterator<Item = Self>) -> RawAttributeData;
@@ -331,34 +304,6 @@ impl InAttrs for () {
 pub trait FromAttributeData: Sized {
     type DataType: FromAttributeDataSource;
     fn from_attr_data(data: impl Iterator<Item = Self::DataType>) -> impl Iterator<Item = Self>;
-}
-
-impl FromAttributeData for Vec3 {
-    type DataType = [f32; 3];
-    fn from_attr_data(data: impl Iterator<Item = Self::DataType>) -> impl Iterator<Item = Self> {
-        data.map(Self::from)
-    }
-}
-
-impl FromAttributeData for i32 {
-    type DataType = i32;
-    fn from_attr_data(data: impl Iterator<Item = Self::DataType>) -> impl Iterator<Item = Self> {
-        data
-    }
-}
-
-impl FromAttributeData for f32 {
-    type DataType = f32;
-    fn from_attr_data(data: impl Iterator<Item = Self::DataType>) -> impl Iterator<Item = Self> {
-        data
-    }
-}
-
-impl FromAttributeData for String {
-    type DataType = String;
-    fn from_attr_data(data: impl Iterator<Item = Self::DataType>) -> impl Iterator<Item = Self> {
-        data
-    }
 }
 
 /// Chunks raw attribute data so that it can be processed more easily by [`FromAttributeData`] into
