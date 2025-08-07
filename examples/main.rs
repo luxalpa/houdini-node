@@ -13,6 +13,9 @@ struct MyPoint {
 #[derive(InAttrs, OutAttrs)]
 struct MyVertex {
     ptnum: usize,
+
+    #[attr(name = "N")]
+    normal: Vec3,
 }
 
 #[derive(InAttrs, OutAttrs)]
@@ -20,10 +23,15 @@ struct MyPrim {
     vertices: Vec<usize>,
 }
 
+#[derive(InAttrs, OutAttrs)]
+struct MyDetail {
+    my_data: String,
+}
+
 #[houdini_node_main]
 fn my_cool_node(
-    geo: Geometry<MyPoint, MyVertex, MyPrim>,
+    geo: Geometry<MyPoint, MyVertex, MyPrim, MyDetail>,
     // _geo2: Geometry<MyPoint>,
-) -> Result<Geometry<MyPoint, MyVertex, MyPrim>, String> {
+) -> Result<Geometry<MyPoint, MyVertex, MyPrim, MyDetail>, String> {
     Ok(geo)
 }
