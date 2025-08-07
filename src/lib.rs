@@ -68,7 +68,7 @@ impl RawAttributeData {
     }
 
     /// Helper function
-    fn err<T>(self, expected: AttributeType) -> Result<T> {
+    fn err<T>(&self, expected: AttributeType) -> Result<T> {
         Err(Error::InvalidAttributeType {
             expected,
             actual: self.kind(),
@@ -109,9 +109,16 @@ impl RawAttributeData {
             other => other.err(AttributeType::PrimVertex),
         }
     }
+
+    pub fn prim_vertex_iter_mut(&mut self) -> Result<impl Iterator<Item = &mut Vec<usize>>> {
+        match self {
+            RawAttributeData::PrimVertex(v) => Ok(v.iter_mut()),
+            other => other.err(AttributeType::PrimVertex),
+        }
+    }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub enum AttributeType {
     Float,
     Int,
@@ -121,7 +128,7 @@ pub enum AttributeType {
 }
 
 impl Display for AttributeType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             AttributeType::Float => write!(f, "float"),
             AttributeType::Int => write!(f, "int"),
@@ -159,6 +166,16 @@ pub enum Error {
         entity: EntityKind,
         attr: &'static str,
     },
+    #[error("Output primitives missing `vertices` pseudo-attribute")]
+    MissingOutPrimVertices,
+    #[error("Output vertices missing `ptnum` pseudo-attribute")]
+    MissingOutVertexPtnums,
+    #[error("Output `ptnum` pseudo-attribute has wrong type.")]
+    InvalidOutVertexPtnum,
+    #[error("Output prim using non-existing vertex: {0}")]
+    InvalidOutPrimVertex(usize),
+    #[error("Attribute is using a pre-defined name: {0}")]
+    AttrNameCollision(&'static str),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -277,10 +294,40 @@ where
     Dt: OutAttrs,
 {
     fn into_raw(self) -> Result<RawGeometryOutput> {
+        let vertices = Vt::into_attr(self.vertices);
+        let mut prims = Pr::into_attr(self.prims);
+
+        // For houdini, we need to convert the vertex indices to point indices.
+        if !prims.is_empty() {
+            let mut primverts = prims
+                .remove("vertices")
+                .ok_or_else(|| Error::MissingOutPrimVertices)?;
+            let vert2pt = vertices
+                .get("ptnum")
+                .ok_or_else(|| Error::MissingOutVertexPtnums)?;
+            let RawAttributeData::Index(vert2pt) = &vert2pt.data else {
+                return Err(Error::InvalidOutVertexPtnum);
+            };
+
+            for primvert in primverts.data.prim_vertex_iter_mut()? {
+                for v in primvert {
+                    *v = *vert2pt
+                        .get(*v)
+                        .ok_or_else(|| Error::InvalidOutPrimVertex(*v))?;
+                }
+            }
+
+            if prims.contains_key("points") {
+                return Err(Error::AttrNameCollision("points"));
+            }
+
+            prims.insert("points", primverts);
+        }
+
         Ok(RawGeometryOutput {
             points: Pt::into_attr(self.points),
-            vertices: Vt::into_attr(self.vertices),
-            prims: Pr::into_attr(self.prims),
+            vertices,
+            prims,
             detail: Dt::into_attr(vec![self.detail]),
         })
     }
