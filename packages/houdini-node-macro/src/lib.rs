@@ -17,7 +17,8 @@ pub fn houdini_node_main(_args: TokenStream, input: TokenStream) -> TokenStream 
             quote! {
                 houdini_node::load_from_raw(
                     iter.next()
-                        .ok_or_else(|| houdini_node::Error::GeometryMissing(#i))?
+                        .ok_or_else(|| houdini_node::Error::GeometryMissing(#i))?,
+                    #i
                 )?
             }
         })
@@ -26,13 +27,19 @@ pub fn houdini_node_main(_args: TokenStream, input: TokenStream) -> TokenStream 
     let expanded = quote! {
         #input_fn
 
-        fn main() -> houdini_node::Result<()> {
-            let raw_geos = houdini_node::load_raw_from_stdin()?;
-            let mut iter = raw_geos.into_iter();
+        fn main() {
+            let run = || {
+                let raw_geos = houdini_node::load_raw_from_stdin()?;
+                let mut iter = raw_geos.into_iter();
 
-            let out_geo = #fn_name(#(#input_params),*)
-                .map_err(|e| houdini_node::Error::UserError(e.to_string()))?;
-            houdini_node::generate_to_stdout(out_geo)
+                let out_geo = #fn_name(#(#input_params),*)
+                    .map_err(|e| houdini_node::Error::UserError(e.to_string()))?;
+                houdini_node::generate_to_stdout(out_geo)
+            };
+            if let Err(e) = run() {
+                eprintln!("{}", e);
+                std::process::exit(1);
+            }
         }
     };
 
@@ -67,7 +74,13 @@ fn impl_in_attrs(ast: &DeriveInput) -> TokenStream {
             let field_name = format_ident!("v_{}", field.ident.as_ref().unwrap());
             let attr_name = get_attr_name(field);
             quote! {
-                let #field_name = houdini_node::load_from_attr(attrs.remove(#attr_name).unwrap())?;
+                let #field_name = houdini_node::load_from_attr(attrs.remove(#attr_name).ok_or_else(
+                    || houdini_node::Error::MissingAttr {
+                        input_index: err_context.input_index,
+                        entity: err_context.entity,
+                        attr: #attr_name,
+                    })?
+                )?;
             }
         })
         .collect();
@@ -87,6 +100,7 @@ fn impl_in_attrs(ast: &DeriveInput) -> TokenStream {
         impl houdini_node::InAttrs for #name {
             fn from_attr(
                 mut attrs: std::collections::HashMap<String, houdini_node::RawAttribute>,
+                err_context: houdini_node::ErrContext,
             ) -> houdini_node::Result<impl Iterator<Item = Self>> {
                 #(#field_loads)*
                 Ok(#field_construction)

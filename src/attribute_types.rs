@@ -1,55 +1,7 @@
-//! High level attribute types that can be used for fields on the derive macro.
+//! Extra high level attribute types that can be used for fields on the derive macro.
 
 use crate::{FromAttributeData, IntoAttributeData};
 use glam::{Mat2, Mat3, Mat4, Quat, Vec2, Vec3, Vec4};
-
-// *****************************************
-
-impl FromAttributeData for i32 {
-    type DataType = i32;
-    fn from_attr_data(data: impl Iterator<Item = Self::DataType>) -> impl Iterator<Item = Self> {
-        data
-    }
-}
-
-impl IntoAttributeData for i32 {
-    type DataType = i32;
-    fn into_attr_data(data: impl Iterator<Item = Self>) -> impl Iterator<Item = Self::DataType> {
-        data
-    }
-}
-
-// *****************************************
-
-impl FromAttributeData for f32 {
-    type DataType = f32;
-    fn from_attr_data(data: impl Iterator<Item = Self::DataType>) -> impl Iterator<Item = Self> {
-        data
-    }
-}
-
-impl IntoAttributeData for f32 {
-    type DataType = f32;
-    fn into_attr_data(data: impl Iterator<Item = Self>) -> impl Iterator<Item = Self::DataType> {
-        data
-    }
-}
-
-// *****************************************
-
-impl FromAttributeData for String {
-    type DataType = String;
-    fn from_attr_data(data: impl Iterator<Item = Self::DataType>) -> impl Iterator<Item = Self> {
-        data
-    }
-}
-
-impl IntoAttributeData for String {
-    type DataType = String;
-    fn into_attr_data(data: impl Iterator<Item = Self>) -> impl Iterator<Item = Self::DataType> {
-        data
-    }
-}
 
 // *****************************************
 
@@ -79,7 +31,7 @@ impl FromAttributeData for Vec2 {
 impl IntoAttributeData for Vec2 {
     type DataType = [f32; 2];
     fn into_attr_data(data: impl Iterator<Item = Self>) -> impl Iterator<Item = Self::DataType> {
-        data.map(|v| v.into())
+        data.map(Into::into)
     }
 }
 
@@ -96,7 +48,7 @@ impl IntoAttributeData for Vec3 {
     type DataType = [f32; 3];
 
     fn into_attr_data(data: impl Iterator<Item = Self>) -> impl Iterator<Item = Self::DataType> {
-        data.map(|v| v.into())
+        data.map(Into::into)
     }
 }
 
@@ -112,7 +64,7 @@ impl FromAttributeData for Vec4 {
 impl IntoAttributeData for Vec4 {
     type DataType = [f32; 4];
     fn into_attr_data(data: impl Iterator<Item = Self>) -> impl Iterator<Item = Self::DataType> {
-        data.map(|v| v.into())
+        data.map(Into::into)
     }
 }
 

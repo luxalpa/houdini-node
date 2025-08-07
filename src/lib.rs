@@ -1,9 +1,9 @@
+mod attribute_data_basic;
 mod attribute_types;
 
-use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::fmt::Display;
+use std::fmt::{Display, Formatter};
 use std::iter;
 
 /// Re-export itertools as it is used in the derive macros.
@@ -38,6 +38,8 @@ pub enum RawAttributeData {
     Float(Vec<f32>),
     Int(Vec<i32>),
     String(Vec<String>),
+    Index(Vec<usize>),
+    PrimVertex(Vec<Vec<usize>>),
 }
 
 impl RawAttributeData {
@@ -46,6 +48,8 @@ impl RawAttributeData {
             RawAttributeData::Float(v) => v.len(),
             RawAttributeData::Int(v) => v.len(),
             RawAttributeData::String(v) => v.len(),
+            RawAttributeData::Index(v) => v.len(),
+            RawAttributeData::PrimVertex(v) => v.len(),
         }
     }
 
@@ -58,6 +62,8 @@ impl RawAttributeData {
             RawAttributeData::Float(_) => AttributeType::Float,
             RawAttributeData::Int(_) => AttributeType::Int,
             RawAttributeData::String(_) => AttributeType::String,
+            RawAttributeData::Index(_) => AttributeType::Index,
+            RawAttributeData::PrimVertex(_) => AttributeType::PrimVertex,
         }
     }
 
@@ -89,6 +95,20 @@ impl RawAttributeData {
             other => other.err(AttributeType::String),
         }
     }
+
+    pub fn index(self) -> Result<Vec<usize>> {
+        match self {
+            RawAttributeData::Index(v) => Ok(v),
+            other => other.err(AttributeType::Index),
+        }
+    }
+
+    pub fn prim_vertex(self) -> Result<Vec<Vec<usize>>> {
+        match self {
+            RawAttributeData::PrimVertex(v) => Ok(v),
+            other => other.err(AttributeType::PrimVertex),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -96,6 +116,8 @@ pub enum AttributeType {
     Float,
     Int,
     String,
+    Index,
+    PrimVertex,
 }
 
 impl Display for AttributeType {
@@ -104,6 +126,8 @@ impl Display for AttributeType {
             AttributeType::Float => write!(f, "float"),
             AttributeType::Int => write!(f, "int"),
             AttributeType::String => write!(f, "string"),
+            AttributeType::Index => write!(f, "index"),
+            AttributeType::PrimVertex => write!(f, "prim_vertex"),
         }
     }
 }
@@ -118,17 +142,23 @@ pub enum Error {
     NoGeometry,
     #[error("No detail attribute found")]
     NoDetail,
-    #[error("Invalid attribute length (expected {expected}, actual {actual})")]
+    #[error("Invalid attribute length (expected: {expected}, actual: {actual})")]
     InvalidAttributeLength { expected: usize, actual: usize },
-    #[error("Invalid attribute type (expected {expected}, actual {actual})")]
+    #[error("Invalid attribute type (expected: {expected}, actual: {actual})")]
     InvalidAttributeType {
         expected: AttributeType,
         actual: AttributeType,
     },
-    #[error("Geometry at input {0} missing")]
+    #[error("Missing geometry at input: {0} ")]
     GeometryMissing(usize),
     #[error("{0}")]
     UserError(String),
+    #[error("Input {input_index} missing {entity} attribute: {attr}")]
+    MissingAttr {
+        input_index: usize,
+        entity: EntityKind,
+        attr: &'static str,
+    },
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -137,10 +167,6 @@ impl Error {
     pub fn print_json(&self) {
         eprintln!("{}", self.to_string());
     }
-}
-
-pub fn load_from_stdin<G: FromRawGeometry>() -> Result<G> {
-    load::<G>(std::io::stdin())
 }
 
 pub fn load_raw_from_stdin() -> Result<Vec<RawGeometry>> {
@@ -152,13 +178,17 @@ pub fn generate_to_stdout<G: IntoRawGeometry>(geometry: G) -> Result<()> {
     Ok(())
 }
 
-pub fn load_from_raw<G: FromRawGeometry>(raw_geometry: RawGeometry) -> Result<G> {
-    G::from_raw(raw_geometry)
+pub fn load_from_raw<G: FromRawGeometry>(
+    raw_geometry: RawGeometry,
+    input_index: usize,
+) -> Result<G> {
+    G::from_raw(raw_geometry, input_index)
 }
 
+#[cfg(test)]
 fn load<G: FromRawGeometry>(reader: impl std::io::Read) -> Result<G> {
     let raw_geometry: Vec<RawGeometry> = serde_json::from_reader(reader)?;
-    G::from_raw(raw_geometry.into_iter().next().ok_or(Error::NoGeometry)?)
+    G::from_raw(raw_geometry.into_iter().next().ok_or(Error::NoGeometry)?, 0)
 }
 
 fn generate<G: IntoRawGeometry>(geometry: G) -> Result<String> {
@@ -176,7 +206,7 @@ pub struct Geometry<Pt, Vt = (), Pr = (), Dt = ()> {
 }
 
 pub trait FromRawGeometry: Sized {
-    fn from_raw(raw: RawGeometry) -> Result<Self>;
+    fn from_raw(raw: RawGeometry, input_index: usize) -> Result<Self>;
 }
 
 impl<Pt, Vt, Pr, Dt> FromRawGeometry for Geometry<Pt, Vt, Pr, Dt>
@@ -186,8 +216,14 @@ where
     Pr: InAttrs,
     Dt: InAttrs,
 {
-    fn from_raw(raw: RawGeometry) -> Result<Self> {
-        let mut details = Dt::from_attr(raw.detail)?;
+    fn from_raw(raw: RawGeometry, input_index: usize) -> Result<Self> {
+        let mut details = Dt::from_attr(
+            raw.detail,
+            ErrContext {
+                input_index,
+                entity: EntityKind::Detail,
+            },
+        )?;
         let detail = details.next();
 
         let detail = if let Some(detail) = detail {
@@ -200,9 +236,30 @@ where
         };
 
         Ok(Self {
-            points: Pt::from_attr(raw.points)?.collect(),
-            vertices: Vt::from_attr(raw.vertices)?.collect(),
-            prims: Pr::from_attr(raw.prims)?.collect(),
+            points: Pt::from_attr(
+                raw.points,
+                ErrContext {
+                    input_index,
+                    entity: EntityKind::Point,
+                },
+            )?
+            .collect(),
+            vertices: Vt::from_attr(
+                raw.vertices,
+                ErrContext {
+                    input_index,
+                    entity: EntityKind::Vertex,
+                },
+            )?
+            .collect(),
+            prims: Pr::from_attr(
+                raw.prims,
+                ErrContext {
+                    input_index,
+                    entity: EntityKind::Prim,
+                },
+            )?
+            .collect(),
             detail,
         })
     }
@@ -229,6 +286,31 @@ where
     }
 }
 
+#[derive(Debug, Copy, Clone)]
+pub struct ErrContext {
+    pub input_index: usize,
+    pub entity: EntityKind,
+}
+
+#[derive(Debug, Copy, Clone)]
+pub enum EntityKind {
+    Point,
+    Vertex,
+    Prim,
+    Detail,
+}
+
+impl Display for EntityKind {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            EntityKind::Point => write!(f, "point"),
+            EntityKind::Vertex => write!(f, "vertex"),
+            EntityKind::Prim => write!(f, "prim"),
+            EntityKind::Detail => write!(f, "detail"),
+        }
+    }
+}
+
 pub trait OutAttrs: Sized {
     fn into_attr(entities: Vec<Self>) -> HashMap<&'static str, RawAttribute>;
 }
@@ -249,51 +331,12 @@ pub trait IntoAttributeDataSource: Sized {
     fn into_attr_data(data: impl Iterator<Item = Self>) -> RawAttributeData;
 }
 
-impl<const N: usize> IntoAttributeDataSource for [f32; N] {
-    const LEN: usize = N;
-    fn into_attr_data(data: impl Iterator<Item = Self>) -> RawAttributeData {
-        RawAttributeData::Float(data.flatten().collect())
-    }
-}
-
-impl<const N: usize> IntoAttributeDataSource for [i32; N] {
-    const LEN: usize = N;
-    fn into_attr_data(data: impl Iterator<Item = Self>) -> RawAttributeData {
-        RawAttributeData::Int(data.flatten().collect())
-    }
-}
-
-impl<const N: usize> IntoAttributeDataSource for [String; N] {
-    const LEN: usize = N;
-    fn into_attr_data(data: impl Iterator<Item = Self>) -> RawAttributeData {
-        RawAttributeData::String(data.flatten().collect())
-    }
-}
-
-impl IntoAttributeDataSource for f32 {
-    const LEN: usize = 1;
-    fn into_attr_data(data: impl Iterator<Item = Self>) -> RawAttributeData {
-        RawAttributeData::Float(data.collect())
-    }
-}
-
-impl IntoAttributeDataSource for i32 {
-    const LEN: usize = 1;
-    fn into_attr_data(data: impl Iterator<Item = Self>) -> RawAttributeData {
-        RawAttributeData::Int(data.collect())
-    }
-}
-
-impl IntoAttributeDataSource for String {
-    const LEN: usize = 1;
-    fn into_attr_data(data: impl Iterator<Item = Self>) -> RawAttributeData {
-        RawAttributeData::String(data.collect())
-    }
-}
-
 /// To be derived from the Geo Entity (Point, Vertex, Prim or Detail)
 pub trait InAttrs: Sized {
-    fn from_attr(attrs: HashMap<String, RawAttribute>) -> Result<impl Iterator<Item = Self>>;
+    fn from_attr(
+        attrs: HashMap<String, RawAttribute>,
+        err_context: ErrContext,
+    ) -> Result<impl Iterator<Item = Self>>;
 
     /// Returns Some(()) for the `()` type, None in all other cases.
     fn empty() -> Option<Self> {
@@ -302,7 +345,10 @@ pub trait InAttrs: Sized {
 }
 
 impl InAttrs for () {
-    fn from_attr(_attrs: HashMap<String, RawAttribute>) -> Result<impl Iterator<Item = Self>> {
+    fn from_attr(
+        _attrs: HashMap<String, RawAttribute>,
+        _err_ctx: ErrContext,
+    ) -> Result<impl Iterator<Item = Self>> {
         Ok(iter::empty())
     }
 
@@ -323,53 +369,6 @@ pub trait FromAttributeData: Sized {
 pub trait FromAttributeDataSource: Sized {
     const LEN: usize;
     fn from_attr_data(data: RawAttribute) -> Result<impl Iterator<Item = Self>>;
-}
-
-fn into_array_iter<T, const N: usize>(v: Vec<T>) -> impl Iterator<Item = [T; N]> {
-    let mut v = v.into_iter();
-    iter::from_fn(move || v.next_array())
-}
-
-impl<const N: usize> FromAttributeDataSource for [f32; N] {
-    const LEN: usize = N;
-    fn from_attr_data(data: RawAttribute) -> Result<impl Iterator<Item = Self>> {
-        Ok(into_array_iter(data.data.float()?))
-    }
-}
-
-impl<const N: usize> FromAttributeDataSource for [i32; N] {
-    const LEN: usize = N;
-    fn from_attr_data(data: RawAttribute) -> Result<impl Iterator<Item = Self>> {
-        Ok(into_array_iter(data.data.int()?))
-    }
-}
-
-impl<const N: usize> FromAttributeDataSource for [String; N] {
-    const LEN: usize = N;
-    fn from_attr_data(data: RawAttribute) -> Result<impl Iterator<Item = Self>> {
-        Ok(into_array_iter(data.data.string()?))
-    }
-}
-
-impl FromAttributeDataSource for f32 {
-    const LEN: usize = 1;
-    fn from_attr_data(data: RawAttribute) -> Result<impl Iterator<Item = Self>> {
-        Ok(data.data.float()?.into_iter())
-    }
-}
-
-impl FromAttributeDataSource for i32 {
-    const LEN: usize = 1;
-    fn from_attr_data(data: RawAttribute) -> Result<impl Iterator<Item = Self>> {
-        Ok(data.data.int()?.into_iter())
-    }
-}
-
-impl FromAttributeDataSource for String {
-    const LEN: usize = 1;
-    fn from_attr_data(data: RawAttribute) -> Result<impl Iterator<Item = Self>> {
-        Ok(data.data.string()?.into_iter())
-    }
 }
 
 pub fn load_from_attr<T: FromAttributeData>(attr: RawAttribute) -> Result<impl Iterator<Item = T>> {

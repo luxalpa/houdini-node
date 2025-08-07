@@ -1,4 +1,4 @@
-use glam::Vec3;
+use glam::{Mat3, Vec3};
 use houdini_node::Geometry;
 use houdini_node_macro::{InAttrs, OutAttrs, houdini_node_main};
 
@@ -6,13 +6,24 @@ use houdini_node_macro::{InAttrs, OutAttrs, houdini_node_main};
 struct MyPoint {
     #[attr(name = "P")]
     position: Vec3,
+    // parent: i32,
+    // transform: Mat3,
+}
+
+#[derive(InAttrs, OutAttrs)]
+struct MyVertex {
+    ptnum: usize,
+}
+
+#[derive(InAttrs, OutAttrs)]
+struct MyPrim {
+    vertices: Vec<usize>,
 }
 
 #[houdini_node_main]
 fn my_cool_node(
-    geo: Geometry<MyPoint>,
-    _geo2: Geometry<MyPoint>,
-) -> Result<Geometry<MyPoint>, String> {
-    println!("Hello, world!");
+    geo: Geometry<MyPoint, MyVertex, MyPrim>,
+    // _geo2: Geometry<MyPoint>,
+) -> Result<Geometry<MyPoint, MyVertex, MyPrim>, String> {
     Ok(geo)
 }
