@@ -36,8 +36,11 @@ pub struct RawAttribute {
 #[serde(rename_all = "snake_case")]
 pub enum RawAttributeData {
     Float(Vec<f32>),
+    FloatArray(Vec<Vec<f32>>),
     Int(Vec<i32>),
+    IntArray(Vec<Vec<i32>>),
     String(Vec<String>),
+    StringArray(Vec<Vec<String>>),
     Index(Vec<usize>),
     PrimVertex(Vec<Vec<usize>>),
 }
@@ -46,8 +49,11 @@ impl RawAttributeData {
     pub fn len(&self) -> usize {
         match self {
             RawAttributeData::Float(v) => v.len(),
+            RawAttributeData::FloatArray(v) => v.len(),
             RawAttributeData::Int(v) => v.len(),
+            RawAttributeData::IntArray(v) => v.len(),
             RawAttributeData::String(v) => v.len(),
+            RawAttributeData::StringArray(v) => v.len(),
             RawAttributeData::Index(v) => v.len(),
             RawAttributeData::PrimVertex(v) => v.len(),
         }
@@ -60,8 +66,11 @@ impl RawAttributeData {
     pub fn kind(&self) -> AttributeType {
         match self {
             RawAttributeData::Float(_) => AttributeType::Float,
+            RawAttributeData::FloatArray(_) => AttributeType::FloatArray,
             RawAttributeData::Int(_) => AttributeType::Int,
+            RawAttributeData::IntArray(_) => AttributeType::IntArray,
             RawAttributeData::String(_) => AttributeType::String,
+            RawAttributeData::StringArray(_) => AttributeType::StringArray,
             RawAttributeData::Index(_) => AttributeType::Index,
             RawAttributeData::PrimVertex(_) => AttributeType::PrimVertex,
         }
@@ -82,6 +91,13 @@ impl RawAttributeData {
         }
     }
 
+    pub fn float_array(self) -> Result<Vec<Vec<f32>>> {
+        match self {
+            RawAttributeData::FloatArray(v) => Ok(v),
+            other => other.err(AttributeType::FloatArray),
+        }
+    }
+
     pub fn int(self) -> Result<Vec<i32>> {
         match self {
             RawAttributeData::Int(v) => Ok(v),
@@ -89,10 +105,24 @@ impl RawAttributeData {
         }
     }
 
+    pub fn int_array(self) -> Result<Vec<Vec<i32>>> {
+        match self {
+            RawAttributeData::IntArray(v) => Ok(v),
+            other => other.err(AttributeType::IntArray),
+        }
+    }
+
     pub fn string(self) -> Result<Vec<String>> {
         match self {
             RawAttributeData::String(v) => Ok(v),
             other => other.err(AttributeType::String),
+        }
+    }
+
+    pub fn string_array(self) -> Result<Vec<Vec<String>>> {
+        match self {
+            RawAttributeData::StringArray(v) => Ok(v),
+            other => other.err(AttributeType::StringArray),
         }
     }
 
@@ -121,8 +151,11 @@ impl RawAttributeData {
 #[derive(Debug, Copy, Clone)]
 pub enum AttributeType {
     Float,
+    FloatArray,
     Int,
+    IntArray,
     String,
+    StringArray,
     Index,
     PrimVertex,
 }
@@ -131,8 +164,11 @@ impl Display for AttributeType {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             AttributeType::Float => write!(f, "float"),
+            AttributeType::FloatArray => write!(f, "float_array"),
             AttributeType::Int => write!(f, "int"),
+            AttributeType::IntArray => write!(f, "int_array"),
             AttributeType::String => write!(f, "string"),
+            AttributeType::StringArray => write!(f, "string_array"),
             AttributeType::Index => write!(f, "index"),
             AttributeType::PrimVertex => write!(f, "prim_vertex"),
         }

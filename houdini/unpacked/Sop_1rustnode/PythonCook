@@ -132,6 +132,9 @@ def serialize_node(node):
             "int" if data_type == hou.attribData.Int else \
                 "string" if data_type == hou.attribData.String else None
 
+        if attr.isArrayType():
+            key = key + "_array"
+
         if not key:
             continue
 
@@ -202,13 +205,24 @@ def load_prim_attr(name, data, geo):
 
 def load_detail_attr(name, data, geo):
     d = data["data"]
-    geo.addAttrib(hou.attribType.Global, name, default_value(data))
 
-    value = d["float"] if "float" in d \
-        else d["int"] if "int" in d \
-        else d["string"]
+    key = next((k for k in ("float", "int", "string", "float_array", "int_array", "string_array") if k in d), None)
 
-    geo.setGlobalAttribValue(name, value)
+    if key.endswith("_array"):
+        data_type = (
+            hou.attribData.Float if key == "float_array" else
+            hou.attribData.Int if key == "int_array" else
+            hou.attribData.String if key == "string_array" else None
+        )
+        if not data_type:
+            error("Wrong data type for output detail attribute")
+            return
+
+        geo.addArrayAttrib(hou.attribType.Global, name, data_type, tuple_size=data["tuple_size"])
+    else:
+        geo.addAttrib(hou.attribType.Global, name, default_value(data))
+
+    geo.setGlobalAttribValue(name, d[key][0])
 
 
 def load_geo(json_data):

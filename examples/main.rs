@@ -23,15 +23,29 @@ struct MyPrim {
     vertices: Vec<usize>,
 }
 
-#[derive(InAttrs, OutAttrs)]
+#[derive(InAttrs)]
 struct MyDetail {
     my_data: String,
+}
+
+#[derive(OutAttrs)]
+struct OutDetail {
+    some_data: Vec<f32>,
+    other_data: String,
 }
 
 #[houdini_node_main]
 fn my_cool_node(
     geo: Geometry<MyPoint, MyVertex, MyPrim, MyDetail>,
     // _geo2: Geometry<MyPoint>,
-) -> Result<Geometry<MyPoint, MyVertex, MyPrim, MyDetail>, String> {
-    Ok(geo)
+) -> Result<Geometry<MyPoint, MyVertex, MyPrim, OutDetail>, String> {
+    Ok(Geometry {
+        points: geo.points,
+        vertices: geo.vertices,
+        prims: geo.prims,
+        detail: OutDetail {
+            some_data: vec![1.0, 2.0, 3.0],
+            other_data: "hello".to_string(),
+        },
+    })
 }

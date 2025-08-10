@@ -48,12 +48,15 @@ macro_rules! impl_attribute_data_source {
 }
 
 impl_attribute_data_source!(f32, Float, float);
+impl_attribute_data_source!(Vec<f32>, FloatArray, float_array);
 impl_attribute_data_source!(i32, Int, int);
+impl_attribute_data_source!(Vec<i32>, IntArray, int_array);
 impl_attribute_data_source!(String, String, string);
+impl_attribute_data_source!(Vec<String>, StringArray, string_array);
 impl_attribute_data_source!(usize, Index, index);
 impl_attribute_data_source!(Vec<usize>, PrimVertex, prim_vertex);
 
-macro_rules! impl_array_attribute_data_source {
+macro_rules! impl_touple_attribute_data_source {
     ($type:ty, $variant:ident, $method:ident) => {
         impl<const N: usize> FromAttributeDataSource for [$type; N] {
             const LEN: usize = N;
@@ -71,10 +74,10 @@ macro_rules! impl_array_attribute_data_source {
     };
 }
 
-impl_array_attribute_data_source!(f32, Float, float);
-impl_array_attribute_data_source!(i32, Int, int);
-impl_array_attribute_data_source!(String, String, string);
-impl_array_attribute_data_source!(usize, Index, index);
+impl_touple_attribute_data_source!(f32, Float, float);
+impl_touple_attribute_data_source!(i32, Int, int);
+impl_touple_attribute_data_source!(String, String, string);
+impl_touple_attribute_data_source!(usize, Index, index);
 
 fn into_array_iter<T, const N: usize>(v: Vec<T>) -> impl Iterator<Item = [T; N]> {
     let mut v = v.into_iter();
