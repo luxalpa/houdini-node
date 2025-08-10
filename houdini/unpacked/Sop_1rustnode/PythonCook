@@ -1,0 +1,284 @@
+import hou
+import subprocess
+import sys
+import json
+
+
+def serialize_node(node):
+    vertices = {}
+    prims = {}
+    points = {}
+    detail = {}
+
+    data = {
+        "points": points,
+        "vertices": vertices,
+        "prims": prims,
+        "detail": detail,
+    }
+
+    geo = node.geometry()
+
+    # --- Vertices ---
+
+    vt_points = []
+    for vertex in geo.globVertices("*"):
+        vt_points.append(vertex.point().number())
+
+    vertices["ptnum"] = {
+        "tuple_size": 1,
+        "data": {
+            "index": vt_points
+        }
+    }
+
+    for attr in geo.vertexAttribs():
+        if attr.isArrayType():
+            continue
+
+        tuple_size = attr.size()
+        data_type = attr.dataType()
+        if data_type == hou.attribData.Float:
+            d = {
+                "float": geo.vertexFloatAttribValues(attr.name())
+            }
+        elif data_type == hou.attribData.Int:
+            d = {
+                "int": geo.vertexIntAttribValues(attr.name())
+            }
+        elif data_type == hou.attribData.String:
+            d = {
+                "string": geo.vertexStringAttribValues(attr.name())
+            }
+        else:
+            continue
+        vertices[attr.name()] = {
+            "tuple_size": tuple_size,
+            "data": d
+        }
+
+    # --- Primitives ---
+
+    primverts = []
+    for prim in geo.prims():
+        primverts.append([v.linearNumber() for v in prim.vertices()])
+
+    prims["vertices"] = {
+        "tuple_size": 1,
+        "data": {
+            "prim_vertex": primverts
+        }
+    }
+
+    for attr in geo.primAttribs():
+        if attr.isArrayType():
+            continue
+
+        tuple_size = attr.size()
+        data_type = attr.dataType()
+        if data_type == hou.attribData.Float:
+            d = {
+                "float": geo.primFloatAttribValues(attr.name())
+            }
+        elif data_type == hou.attribData.Int:
+            d = {
+                "int": geo.primIntAttribValues(attr.name())
+            }
+        elif data_type == hou.attribData.String:
+            d = {
+                "string": geo.primStringAttribValues(attr.name())
+            }
+        else:
+            continue
+        prims[attr.name()] = {
+            "tuple_size": tuple_size,
+            "data": d
+        }
+
+    # --- Points ---
+
+    for attr in geo.pointAttribs():
+        tuple_size = attr.size()
+        data_type = attr.dataType()
+        if attr.isArrayType():
+            continue
+
+        if data_type == hou.attribData.Float:
+            d = {
+                "float": geo.pointFloatAttribValues(attr.name())
+            }
+        elif data_type == hou.attribData.Int:
+            d = {
+                "int": geo.pointIntAttribValues(attr.name())
+            }
+        elif data_type == hou.attribData.String:
+            d = {
+                "string": geo.pointStringAttribValues(attr.name())
+            }
+        else:
+            continue
+        points[attr.name()] = {
+            "tuple_size": tuple_size,
+            "data": d
+        }
+
+    # --- Detail ---
+
+    for attr in geo.globalAttribs():
+        tuple_size = attr.size()
+        data_type = attr.dataType()
+
+        key = "float" if data_type == hou.attribData.Float else \
+            "int" if data_type == hou.attribData.Int else \
+                "string" if data_type == hou.attribData.String else None
+
+        if not key:
+            continue
+
+        detail[attr.name()] = {
+            "tuple_size": tuple_size,
+            "data": {
+                key: [geo.attribValue(attr)]
+            }
+        }
+
+    return data
+
+
+def error(err):
+    hou.pwd().addError(err)
+
+
+def load_positions(points_data, geo):
+    p = points_data
+    if p["tuple_size"] != 3:
+        error("Wrong tuple size for position")
+        return
+    d = p["data"]
+    if not "float" in d:
+        error("Wrong data type for position")
+        return
+
+    positions = list(zip(*[iter(d["float"])] * 3))
+
+    geo.createPoints(positions)
+
+
+def load_pt_attr(name, data, geo):
+    d = data["data"]
+    geo.addAttrib(hou.attribType.Point, name, default_value(data))
+
+    if "float" in d:
+        geo.setPointFloatAttribValues(name, d["float"])
+    elif "int" in d:
+        geo.setPointIntAttribValues(name, d["int"])
+    else:
+        geo.setPointStringAttribValues(name, d["string"])
+
+
+def load_vt_attr(name, data, geo):
+    d = data["data"]
+    geo.addAttrib(hou.attribType.Vertex, name, default_value(data))
+
+    if "float" in d:
+        geo.setVertexFloatAttribValues(name, d["float"])
+    elif "int" in d:
+        geo.setVertexIntAttribValues(name, d["int"])
+    else:
+        geo.setVertexStringAttribValues(name, d["string"])
+
+
+def load_prim_attr(name, data, geo):
+    d = data["data"]
+    geo.addAttrib(hou.attribType.Prim, name, default_value(data))
+
+    if "float" in d:
+        geo.setPrimFloatAttribValues(name, d["float"])
+    elif "int" in d:
+        geo.setPrimIntAttribValues(name, d["int"])
+    else:
+        geo.setPrimStringAttribValues(name, d["string"])
+
+
+def load_detail_attr(name, data, geo):
+    d = data["data"]
+    geo.addAttrib(hou.attribType.Global, name, default_value(data))
+
+    value = d["float"] if "float" in d \
+        else d["int"] if "int" in d \
+        else d["string"]
+
+    geo.setGlobalAttribValue(name, value)
+
+
+def load_geo(json_data):
+    geo = hou.pwd().geometry()
+
+    points = json_data["points"]
+    vertices = json_data["vertices"]
+    prims = json_data["prims"]
+    detail = json_data["detail"]
+
+    load_positions(points["P"], geo)
+
+    if "points" in prims:
+        geo.createPolygons(prims["points"]["data"]["prim_vertex"])
+
+    for attr_name, attr in points.items():
+        if attr_name == "P":
+            continue
+        else:
+            load_pt_attr(attr_name, attr, geo)
+
+    for attr_name, attr in vertices.items():
+        if attr_name == "ptnum":
+            continue
+        else:
+            load_vt_attr(attr_name, attr, geo)
+
+    for attr_name, attr in prims.items():
+        if attr_name == "points":
+            continue
+        else:
+            load_prim_attr(attr_name, attr, geo)
+
+    for attr_name, attr in detail.items():
+        load_detail_attr(attr_name, attr, geo)
+
+
+def default_value(attr):
+    tuple_size = attr["tuple_size"]
+    d = attr["data"]
+    default_val = 0.0 if "float" in d else 0 if "int" in d else ''
+    if tuple_size > 1:
+        default_val = [default_val] * tuple_size
+    return default_val
+
+
+def main():
+    inputs = hou.pwd().inputs()
+
+    data = [serialize_node(inputs[0])]
+
+    json_data = json.dumps(data)
+
+    result = subprocess.run(
+        [hou.parm("executable").eval()],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        input=json_data,
+        text=True,
+        shell=False,
+        creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
+    )
+
+    hou.pwd().geometry().clear()
+
+    if result.stderr:
+        hou.pwd().addError(result.stderr)
+    else:
+        data = json.loads(result.stdout)
+        load_geo(data)
+
+
+main()

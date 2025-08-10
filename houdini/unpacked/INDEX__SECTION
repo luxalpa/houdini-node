@@ -1,0 +1,14 @@
+Operator:     rustnode
+Label:        Rust Node
+Path:         oplib:/Sop/rustnode?Sop/rustnode
+Icon:         MISC_python
+Table:        Sop
+License:      
+Extra:        
+User:         
+Inputs:       1 to 1
+Subnet:       false
+Python:       true
+Empty:        false
+Modified:     Sat Aug  9 14:25:31 2025
+

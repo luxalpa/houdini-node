@@ -1,0 +1,20 @@
+# Dialog script for rustnode automatically generated
+
+{
+    name	rustnode
+    script	rustnode
+    label	"Rust Node"
+
+    help {
+    }
+
+    inputlabel	1	"Input #1"
+
+    parm {
+        name    "executable"
+        label   "Executable"
+        type    file
+        default { "" }
+        parmtag { "script_callback_language" "python" }
+    }
+}
