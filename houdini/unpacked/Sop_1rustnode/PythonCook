@@ -220,7 +220,7 @@ def load_detail_attr(name, data, geo):
             hou.attribData.String if key == "string_array" else None
         )
         if not data_type:
-            error("Wrong data type for output detail attribute")
+            error(f"Wrong data type for output detail attribute `{name}`")
             return
 
         geo.addArrayAttrib(hou.attribType.Global, name, data_type, tuple_size=data["tuple_size"])
