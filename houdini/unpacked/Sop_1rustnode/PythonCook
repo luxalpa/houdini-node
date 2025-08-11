@@ -141,10 +141,12 @@ def serialize_node(node):
         if not key:
             continue
 
+        value = geo.attribValue(attr)
+
         detail[attr.name()] = {
             "tuple_size": tuple_size,
             "data": {
-                key: [geo.attribValue(attr)]
+                key: [value] if tuple_size == 1 else value
             }
         }
 
