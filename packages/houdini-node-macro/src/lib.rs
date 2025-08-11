@@ -5,7 +5,12 @@ use syn::{Data, DeriveInput, Expr, ExprLit, Fields, Lit, Meta, parse_macro_input
 /// Proc macro to generate a main function.
 #[proc_macro_attribute]
 pub fn houdini_node_main(_args: TokenStream, input: TokenStream) -> TokenStream {
-    let input_fn = parse_macro_input!(input as syn::ItemFn);
+    let mut input_fn = parse_macro_input!(input as syn::ItemFn);
+
+    if input_fn.sig.ident == "main" {
+        input_fn.sig.ident = format_ident!("_main");
+    }
+
     let fn_name = &input_fn.sig.ident;
 
     let input_params: Vec<_> = input_fn

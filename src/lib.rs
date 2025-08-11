@@ -9,6 +9,8 @@ use std::iter;
 /// Re-export itertools as it is used in the derive macros.
 pub use itertools;
 
+pub use houdini_node_macro::{InAttrs, OutAttrs, houdini_node_main};
+
 /// The geometry that gets (de)serialized between Houdini and this script.
 #[derive(Debug, Deserialize)]
 pub struct RawGeometry {
@@ -250,7 +252,7 @@ fn generate<G: IntoRawGeometry>(geometry: G) -> Result<String> {
 }
 
 /// The actual geometry for the script to use in AoS (Array-of-structs) form.
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Default)]
 pub struct Geometry<Pt, Vt = (), Pr = (), Dt = ()> {
     pub points: Vec<Pt>,
     pub vertices: Vec<Vt>,

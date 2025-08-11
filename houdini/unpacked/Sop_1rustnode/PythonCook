@@ -17,6 +17,9 @@ def serialize_node(node):
         "detail": detail,
     }
 
+    if not node:
+        return data
+
     geo = node.geometry()
 
     # --- Vertices ---
@@ -272,7 +275,7 @@ def default_value(attr):
 def main():
     inputs = hou.pwd().inputs()
 
-    data = [serialize_node(inputs[0])]
+    data = [serialize_node(input_node) for input_node in inputs]
 
     json_data = json.dumps(data)
 
