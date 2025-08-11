@@ -1,7 +1,34 @@
 //! Extra high level attribute types that can be used for fields on the derive macro.
 
-use crate::{FromAttributeData, IntoAttributeData};
+use crate::{ErrContext, FromAttributeData, IntoAttributeData, RawAttribute};
 use glam::{Mat2, Mat3, Mat4, Quat, Vec2, Vec3, Vec4};
+use itertools::Either;
+// *****************************************
+
+impl<T: FromAttributeData> FromAttributeData for Option<T> {
+    type DataType = T::DataType;
+
+    /// This implementation will actually not run. It's just implemented for completeness.
+    fn from_attr_data(data: impl Iterator<Item = Self::DataType>) -> impl Iterator<Item = Self> {
+        T::from_attr_data(data).map(Some)
+    }
+
+    fn from_attr_data_raw(
+        attr: Option<RawAttribute>,
+        num_elements: usize,
+        attr_name: &'static str,
+        err_context: ErrContext,
+    ) -> crate::Result<impl Iterator<Item = Self>> {
+        match attr {
+            Some(attr) => Ok(Either::Left(
+                T::from_attr_data_raw(Some(attr), num_elements, attr_name, err_context)?.map(Some),
+            )),
+            None => Ok(Either::Right(
+                std::iter::repeat_with(|| None).take(num_elements),
+            )),
+        }
+    }
+}
 
 // *****************************************
 

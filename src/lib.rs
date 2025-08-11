@@ -6,10 +6,10 @@ use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::iter;
 
+use crate::Error::MissingAttr;
+pub use houdini_node_macro::{InAttrs, OutAttrs, houdini_node_main};
 /// Re-export itertools as it is used in the derive macros.
 pub use itertools;
-
-pub use houdini_node_macro::{InAttrs, OutAttrs, houdini_node_main};
 
 /// The geometry that gets (de)serialized between Houdini and this script.
 #[derive(Debug, Deserialize)]
@@ -447,6 +447,33 @@ impl InAttrs for () {
 pub trait FromAttributeData: Sized {
     type DataType: FromAttributeDataSource;
     fn from_attr_data(data: impl Iterator<Item = Self::DataType>) -> impl Iterator<Item = Self>;
+
+    /// Predefined implementation that chunks the data, then calls `from_attr_data`.
+    fn from_attr_data_raw(
+        attr: Option<RawAttribute>,
+        _num_elements: usize,
+        attr_name: &'static str,
+        err_context: ErrContext,
+    ) -> Result<impl Iterator<Item = Self>> {
+        let Some(attr) = attr else {
+            return Err(MissingAttr {
+                input_index: err_context.input_index,
+                entity: err_context.entity,
+                attr: attr_name,
+            });
+        };
+
+        if attr.tuple_size != Self::DataType::LEN {
+            return Err(Error::InvalidAttributeLength {
+                expected: Self::DataType::LEN,
+                actual: attr.tuple_size,
+            });
+        }
+
+        let data_iter = Self::DataType::from_attr_data(attr)?;
+
+        Ok(Self::from_attr_data(data_iter))
+    }
 }
 
 /// Chunks raw attribute data so that it can be processed more easily by [`FromAttributeData`] into
@@ -456,17 +483,15 @@ pub trait FromAttributeDataSource: Sized {
     fn from_attr_data(data: RawAttribute) -> Result<impl Iterator<Item = Self>>;
 }
 
-pub fn load_from_attr<T: FromAttributeData>(attr: RawAttribute) -> Result<impl Iterator<Item = T>> {
-    if attr.tuple_size != T::DataType::LEN {
-        return Err(Error::InvalidAttributeLength {
-            expected: T::DataType::LEN,
-            actual: attr.tuple_size,
-        });
-    }
-
-    let data_iter = T::DataType::from_attr_data(attr)?;
-
-    Ok(T::from_attr_data(data_iter))
+/// Exists just for the macro to work. Wrapper around [`FromAttributeData::from_attr_data_raw`] for
+/// inference.
+pub fn load_from_attr<T: FromAttributeData>(
+    attr: Option<RawAttribute>,
+    num_elements: usize,
+    attr_name: &'static str,
+    err_context: ErrContext,
+) -> Result<impl Iterator<Item = T>> {
+    T::from_attr_data_raw(attr, num_elements, attr_name, err_context)
 }
 
 pub fn generate_to_attr<T: IntoAttributeData>(data: Vec<T>) -> RawAttribute {

@@ -79,12 +79,11 @@ fn impl_in_attrs(ast: &DeriveInput) -> TokenStream {
             let field_name = format_ident!("v_{}", field.ident.as_ref().unwrap());
             let attr_name = get_attr_name(field);
             quote! {
-                let #field_name = houdini_node::load_from_attr(attrs.remove(#attr_name).ok_or_else(
-                    || houdini_node::Error::MissingAttr {
-                        input_index: err_context.input_index,
-                        entity: err_context.entity,
-                        attr: #attr_name,
-                    })?
+                let #field_name = houdini_node::load_from_attr(
+                    attrs.remove(#attr_name),
+                    num_elements,
+                    #attr_name,
+                    err_context
                 )?;
             }
         })
@@ -107,6 +106,7 @@ fn impl_in_attrs(ast: &DeriveInput) -> TokenStream {
                 mut attrs: std::collections::HashMap<String, houdini_node::RawAttribute>,
                 err_context: houdini_node::ErrContext,
             ) -> houdini_node::Result<impl Iterator<Item = Self>> {
+                let num_elements = attrs.values().next().map(|a| a.data.len()).unwrap_or(0);
                 #(#field_loads)*
                 Ok(#field_construction)
             }
