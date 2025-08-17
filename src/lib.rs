@@ -1,3 +1,5 @@
+#![doc = include_str!("../README.md")]
+
 mod attribute_data_basic;
 mod attribute_types;
 
@@ -583,18 +585,20 @@ mod tests {
 
     #[test]
     fn generating() {
-        let g = Geometry::<GeoPoint> {
+        let g = Geometry::<GeoPoint, (), (), GeoDetail> {
             points: vec![GeoPoint {
                 position: Vec3::ZERO,
                 name: "a".to_string(),
             }],
             vertices: vec![],
             prims: vec![],
-            detail: (),
+            detail: GeoDetail {
+                some_detail: "hello".to_string(),
+            },
         };
 
         let s = generate_for_testing(g.clone()).unwrap();
-        let geo_new = load::<Geometry<GeoPoint>>(s.as_bytes()).unwrap();
+        let geo_new = load::<Geometry<GeoPoint, (), (), GeoDetail>>(s.as_bytes()).unwrap();
         assert_eq!(g, geo_new);
     }
 }

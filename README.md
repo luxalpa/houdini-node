@@ -7,7 +7,30 @@ functions. I wrote this in order to improve my editing and debugging utilities f
 some of my game code and immediately get feedback in Houdini when I change some of the input parameters (like
 Animation-curve assets).
 
-## Plans and ideas
+## Usage
+
+TODO
+
+## Tips and Troubleshooting
+
+### Setting input parameters
+
+Currently, the way to set input parameters is to set them as detail attributes on the input geometry. I suggest wrapping
+the node with your own node that sets the detail attributes.
+
+### Increasing the number of input nodes
+
+The Houdini asset currently comes with 5 inputs. If you need more, all you need to do is increase the maximum inputs on
+the node asset.
+
+### Glam issues
+
+This crate uses a very generous version range for the `glam` dependency. This only works because this crate uses only
+the most basic types and `From` implementations from `glam`. But it's still possible that a larger edit on glam could
+break this. If that happens, please open an issue. Also, if you need to use a different crate, such as `bevy_math` or
+`nalgebra`, please file an issue and support will be added.
+
+## Future plans and ideas
 
 - Support alternate implementations using Houdini Engine and/or HDK
 - File watching from Python.
@@ -26,4 +49,4 @@ Animation-curve assets).
   floatListAttribValues
   for all of the values). Could maybe be supported if we use
   bgeo format instead of JSON.
-- **Dict attributes** We are most likely going to add these.
+- **Dict attributes** We are most likely going to add these for Detail attributes.
