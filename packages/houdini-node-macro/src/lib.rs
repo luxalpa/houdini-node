@@ -22,7 +22,7 @@ pub fn houdini_node_main(_args: TokenStream, input: TokenStream) -> TokenStream 
             quote! {
                 houdini_node::load_from_raw(
                     iter.next()
-                        .ok_or_else(|| houdini_node::Error::GeometryMissing(#i))?,
+                        .ok_or_else(|| houdini_node::Error::GeometryMissing(#i+1))?,
                     #i
                 )?
             }
